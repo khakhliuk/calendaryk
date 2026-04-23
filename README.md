@@ -104,3 +104,4 @@ vue-typescript-tailwind-starter/
 ## Вклад в проект
 
 Если у вас есть идеи по улучшению или вы нашли ошибку, пожалуйста, создайте issue или отправьте pull request.
+# calendaryk
