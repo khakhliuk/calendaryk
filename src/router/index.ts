@@ -7,7 +7,6 @@ import GroupEdit from "../views/GroupEdit.vue";
 import Settings from "../views/Settings.vue";
 import StudentEdit from "../views/StudentEdit.vue";
 import ConnectToTeacher from "../views/ConnectToTeacher.vue";
-import StudentDashboard from "../views/StudentDashboard.vue";
 import History from "../views/History.vue";
 import Teacher from "../views/Teacher.vue";
 import NotFound from "../views/404.vue";
@@ -24,11 +23,6 @@ const routes = [
   { path: "/student", name: "StudentEdit", component: StudentEdit },
   { path: "/teacher", name: "Teacher", component: Teacher },
   { path: "/404", name: "NotFound", component: NotFound },
-  {
-    path: "/student-dashboard",
-    name: "StudentDashboard",
-    component: StudentDashboard,
-  },
 ];
 
 const router = createRouter({
