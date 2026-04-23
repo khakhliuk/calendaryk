@@ -133,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, type Ref, computed, watch } from "vue";
+import { ref, onMounted, computed } from "vue";
 import EventDetailsModal from "../components/EventDetailsModal.vue";
 import { supabase } from "../lib/supabaseClient.js";
 import { format } from "date-fns";

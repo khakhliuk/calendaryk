@@ -82,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, type Ref, computed, watch } from "vue";
+import { computed, watch } from "vue";
 import type { CalEvent } from "../models/getScheduleModel.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { useToast } from "primevue/usetoast";
