@@ -18,7 +18,7 @@
         />
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold text-gray-900 truncate">
-            {{ teacher.name }}
+            {{ teacher.name ?? "Без імені" }}
           </p>
           <p class="text-xs text-gray-400 truncate mt-0.5">
             {{ teacher.email }}
@@ -27,8 +27,7 @@
         <Button
           icon="pi pi-send"
           rounded
-          label="Відкрити чат"
-          text
+          outlined
           severity="info"
           iconPos="right"
           @click="openTelegram(teacher.telegram_username)"
@@ -59,6 +58,7 @@ const teachers = ref<
 >([]);
 
 const getInitials = (name: string) => {
+  if (!name) return "-";
   return name
     .split(" ")
     .slice(0, 2)

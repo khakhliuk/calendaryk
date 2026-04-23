@@ -413,7 +413,7 @@ const share = async () => {
   }
 
   const text = `📚 Приєднуйтесь до керівника ${userData.name}`;
-  const link = `https://t.me/calendaryappbot?startapp=connect_${user!.id}`;
+  const link = `https://t.me/calendarykTestBot?startapp=connect_${user!.id}`;
   const url = encodeURIComponent(link);
   const encodedText = encodeURIComponent(text);
   miniApp.openTelegramLink(

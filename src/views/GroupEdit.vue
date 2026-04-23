@@ -313,7 +313,6 @@ const deleteGroup = async () => {
 
 const deleteSchedule = async (scheduleId: string) => {
   try {
-    console.log("Deleting schedule with ID:", scheduleId);
     savingLoading.value = true;
 
     const { error: attendanceError } = await supabase

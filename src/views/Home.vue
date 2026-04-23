@@ -97,15 +97,15 @@
             <p class="text-xl font-semibold text-gray-900">
               {{ upcomingEventsCount }}
             </p>
-            <span class="text-sm text-gray-500 mt-1">Занять залишилось</span>
+            <span class="text-sm text-gray-500 mt-1">Залишилось</span>
           </div>
         </div>
 
         <div
           v-if="canceledEventsCount > 0"
-          class="flex-1 bg-red-100 rounded-xl px-2 py-2"
+          class="flex-1 bg-red-100 items-center rounded-xl px-2 py-2"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex justify-center items-center gap-2">
             <span class="text-xl">❌</span>
             <p class="text-xl font-semibold text-gray-900">
               {{ canceledEventsCount }}

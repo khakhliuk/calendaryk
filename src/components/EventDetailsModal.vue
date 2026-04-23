@@ -13,7 +13,7 @@
           format(new Date(props.event.start), "HH:mm, dd.MM.yyyy")
         }}</span>
       </div>
-      <div v-if="props.event.attendance_id !== null">
+      <div v-if="props.event.attendance_id !== null && isTeacher">
         <span class="text-sm text-gray-500">Статус</span>
         <Select
           v-model="props.event.status"
@@ -38,15 +38,13 @@
           </template>
         </Select>
       </div>
-
-      <!-- Статус -->
-      <!-- <div class="flex items-center gap-2">
+      <div v-else class="flex items-center gap-2">
         <i class="pi pi-info-circle" />
         <Tag
           :value="statusLabel(props.event.status)"
           :severity="statusSeverity(props.event.status)"
         />
-      </div> -->
+      </div>
 
       <!-- Список студентів -->
       <!-- <div v-if="selectedEvent.students?.length" class="flex flex-col gap-1">
@@ -88,6 +86,7 @@ import { supabase } from "../lib/supabaseClient.js";
 import { useToast } from "primevue/usetoast";
 const toast = useToast();
 import { format } from "date-fns";
+import { isTeacher } from "../lib/session";
 
 const props = defineProps<{
   event: CalEvent | null;
@@ -141,15 +140,15 @@ const getTextColor = (status: string) => {
   return "text-blue-600";
 };
 
-// const statusLabel = (status: string) => {
-//   return statusOptions.find((s) => s.value === status)?.label ?? status;
-// };
+const statusLabel = (status: string) => {
+  return statusOptions.find((s) => s.value === status)?.label ?? status;
+};
 
-// const statusSeverity = (status: string) => {
-//   if (status === "happened") return "success";
-//   if (status === "canceled") return "danger";
-//   return "info";
-// };
+const statusSeverity = (status: string) => {
+  if (status === "happened") return "success";
+  if (status === "canceled") return "danger";
+  return "info";
+};
 
 const onStatusChange = async (event: CalEvent) => {
   if (!event.attendance_id) return;

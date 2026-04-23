@@ -3,18 +3,42 @@
     v-if="!loading"
     class="min-h-screen bg-white flex items-center justify-center px-4"
   >
-    <div class="w-full max-w-md text-center">
-      <h1 class="text-3xl font-normal text-gray-800 mb-2">Вітаємо!</h1>
-      <p class="text-gray-600 mb-3">Ви збираєтесь продовжити реєстрацію як:</p>
-      <SelectButton v-model="value" :options="options" class="mb-5" />
+    <div class="w-full max-w-md text-center justify-between">
+      <div>
+        <h1 class="text-3xl font-normal text-gray-800 mb-2">Вітаємо!</h1>
+        <p class="text-gray-600 mb-3">
+          Ви збираєтесь продовжити реєстрацію як:
+        </p>
+        <SelectButton v-model="value" :options="options" class="mb-5" />
+      </div>
 
-      <div v-if="value === 'Керівник'" class="space-y-4">
-        <button
+      <div v-if="value === 'Керівник'" class="space-y-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium uppercase tracking-widest">
+            Повне ім'я
+          </label>
+          <InputText
+            v-model="username"
+            placeholder="Прізвище Ім'я По-батькові"
+            class="w-full"
+            :pt="{
+              root: {
+                class:
+                  'bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm w-full',
+              },
+            }"
+          />
+        </div>
+        <Button
           @click="register()"
-          class="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-lg font-medium mb-8"
+          severity="info"
+          class="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-8"
         >
-          Зареєструватись як Керівник
-        </button>
+          <div class="flex flex-col items-center justify-center">
+            <span class="text-lg font-medium">Продовжити як Керівник</span>
+          </div>
+        </Button>
+        <span class="text-gray-600">(Безкоштовний період 14 днів)</span>
       </div>
       <p v-else class="text-gray-600 mb-8">
         Якщо ви хочете підключитись як <b>УЧЕНЬ</b> - зверніться до керівника за
@@ -26,8 +50,8 @@
     v-else
     class="min-h-screen bg-white flex items-center justify-center px-4"
   >
-    <p class="text-gray-600 mb-8">Завантаження...</p>
-    <p class="text-gray-600 mb-8">{{ dopinfo }}</p>
+    <p v-if="!dopinfo" class="text-gray-600 mb-8">Завантаження...</p>
+    <p v-else class="text-gray-600 mb-8">{{ dopinfo }}</p>
   </div>
 </template>
 
@@ -43,6 +67,7 @@ const toast = useToast();
 
 const telegramId = ref<string>("");
 const telegramuUsername = ref<string>("");
+const username = ref<string>("");
 const loading = ref(true);
 const value = ref("Керівник");
 const options = ref(["Керівник", "Учень"]);
@@ -105,6 +130,7 @@ const register = async () => {
           telegramId: telegramId.value,
           is_teacher: true,
           telegram_username: telegramuUsername.value,
+          fullName: username.value,
         },
       },
     });
