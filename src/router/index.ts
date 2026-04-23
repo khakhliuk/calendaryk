@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import Home from "../views/Home.vue";
 import LogIn from "../views/Login.vue";
-import Calendar from "../views/Calendar.vue";
 import Students from "../views/Students.vue";
 import GroupEdit from "../views/GroupEdit.vue";
 import Settings from "../views/Settings.vue";
@@ -16,7 +15,6 @@ const routes = [
   { path: "/connect", name: "ConnectToTeacher", component: ConnectToTeacher },
   { path: "/dashboard", name: "Home", component: Home },
   { path: "/history", name: "History", component: History },
-  { path: "/calendar", name: "Calendar", component: Calendar },
   { path: "/students", name: "Students", component: Students },
   { path: "/group", name: "GroupEdit", component: GroupEdit },
   { path: "/settings", name: "Settings", component: Settings },
