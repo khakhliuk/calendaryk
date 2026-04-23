@@ -1,8 +1,6 @@
 <template>
   <div>
-    <!-- Main Content -->
     <div class="px-4 py-2">
-      <!-- Tabs -->
       <!-- <div class="flex space-x-2 mb-2">
         <button
           @click="activeTab = 'all'"
@@ -27,7 +25,7 @@
           Групи
         </button>
       </div> -->
-      <!-- Search Bar -->
+
       <div class="mb-2 relative">
         <IconField>
           <InputIcon class="pi pi-search" />
@@ -43,7 +41,6 @@
           />
         </IconField>
       </div>
-      <!-- Students List -->
       <div class="space-y-3" v-if="activeTab === 'all'">
         <div class="flex flex-row items-center justify-between">
           <h1 class="text-xl font-bold text-gray-900">
@@ -198,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, type Ref } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { supabase } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";

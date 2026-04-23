@@ -168,7 +168,6 @@
 import { ref, onMounted, type Ref, watch, computed } from "vue";
 import { supabase } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
-import { uk } from "date-fns/locale";
 import type { User } from "../models/user.js";
 import type {
   GetHistoryAttendance,
@@ -183,7 +182,7 @@ const now = new Date();
 const startDate = ref(new Date(now.getFullYear(), now.getMonth(), 1));
 const endDate = ref(new Date());
 
-const contextMenu = ref();
+//const contextMenu = ref();
 const menuStudent = ref<any>(null);
 
 const items = computed(() => [

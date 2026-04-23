@@ -122,10 +122,9 @@ import { ref, onMounted, type Ref } from "vue";
 import { supabase } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
-import type { ScheduleGroup } from "../models/getScheduleModel.js";
 
 const activeTab = ref<"day" | "calendar">("day");
-const scheduleList: Ref<ScheduleGroup[]> = ref([]);
+const scheduleList: Ref<any[]> = ref([]);
 const TIME_THRESHOLD = 20 * 60 * 1000; // 20 хвилин
 
 enum BadgeStatus {

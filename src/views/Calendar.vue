@@ -94,7 +94,6 @@ import type { DatePickerDateSlotOptions } from "primevue/datepicker";
 import type { ScheduleWithDetails } from "../models/getScheduleWithDetails.js";
 
 const calendarEvents: Ref<CalendarEvent[]> = ref([]);
-const selectedDayEvents: Ref<CalendarEvent[]> = ref([]);
 
 interface CalendarEvent {
   scheduleId: string;
@@ -114,12 +113,12 @@ console.log(selectedDate.value);
 const currentYear = computed(() => currentDate.value.getFullYear());
 const currentMonth = computed(() => currentDate.value.getMonth());
 
-const isToday = (date: Date | null) => {
-  if (!date) return false;
-  const today = new Date();
+// const isToday = (date: Date | null) => {
+//   if (!date) return false;
+//   const today = new Date();
 
-  return isSameDay(date, today);
-};
+//   return isSameDay(date, today);
+// };
 
 const isSameDay = (date1: Date, date2: Date): boolean => {
   return (
@@ -147,12 +146,10 @@ const getClassesForDate = (date: Date | null) => {
   });
 };
 
-// Функція для програмного додавання занять
 const addClass = (classData: Schedule) => {
   // scheduleList.value.push(classData);
 };
 
-// Функція для видалення заняття
 const removeClass = (id: number) => {
   // scheduleList.value = scheduleList.value.filter((c) => c.id !== id);
 };
@@ -188,73 +185,73 @@ const getData = async () => {
   const startDate = new Date(year, month, 1);
   const endDate = new Date(year, month + 1, 0);
   console.log("Generated Calendar Events:", scheduleList.value);
-  calendarEvents.value = generateCalendarEvents(
-    scheduleList.value,
-    startDate,
-    endDate,
-  );
+  // calendarEvents.value = generateCalendarEvents(
+  //   scheduleList.value,
+  //   startDate,
+  //   endDate,
+  // );
 };
 
-function generateCalendarEvents(
-  schedules: ScheduleWithDetails[],
-  startDate: Date,
-  endDate: Date,
-): CalendarEvent[] {
-  const events: CalendarEvent[] = [];
+// function generateCalendarEvents(
+//   schedules: ScheduleWithDetails[],
+//   startDate: Date,
+//   endDate: Date,
+// ): CalendarEvent[] {
+//   const events: CalendarEvent[] = [];
 
-  for (const schedule of schedules) {
-    if (!schedule.is_regular) {
-      const scheduleDate = new Date(schedule.start_date);
-      // Просте заняття
-      if (scheduleDate >= startDate && scheduleDate <= endDate) {
-        events.push({
-          scheduleId: schedule.id,
-          title: schedule.title,
-          date: scheduleDate,
-          isRegularOccurrence: false,
-          teacher_id: schedule.teacher_id,
-          visitor: schedule.student_id
-            ? schedule.student!.name
-            : schedule.group!.title,
-          is_group: schedule.is_group,
-        });
-      }
-    } else {
-      // Регулярне заняття
-      const originalDate = new Date(schedule.start_date);
-      const dayOfWeek = originalDate.getDay();
-      const timeHours = originalDate.getHours();
-      const timeMinutes = originalDate.getMinutes();
+//   for (const schedule of schedules) {
+//     if (!schedule.is_regular) {
+//       const scheduleDate = new Date(schedule.start_date);
+//       // Просте заняття
+//       if (scheduleDate >= startDate && scheduleDate <= endDate) {
+//         events.push({
+//           scheduleId: schedule.id,
+//           title: schedule.title,
+//           date: scheduleDate,
+//           isRegularOccurrence: false,
+//           teacher_id: schedule.teacher_id,
+//           visitor: schedule.student_id
+//             ? schedule.student!.name
+//             : schedule.group!.title,
+//           is_group: schedule.is_group,
+//         });
+//       }
+//     } else {
+//       // Регулярне заняття
+//       const originalDate = new Date(schedule.start_date);
+//       const dayOfWeek = originalDate.getDay();
+//       const timeHours = originalDate.getHours();
+//       const timeMinutes = originalDate.getMinutes();
 
-      let currentDate = new Date(startDate);
+//       let currentDate = new Date(startDate);
 
-      while (currentDate.getDay() !== dayOfWeek) {
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+//       while (currentDate.getDay() !== dayOfWeek) {
+//         currentDate.setDate(currentDate.getDate() + 1);
+//       }
 
-      while (currentDate <= endDate) {
-        const eventDate = new Date(currentDate);
-        eventDate.setHours(timeHours, timeMinutes, 0, 0);
+//       while (currentDate <= endDate) {
+//         const eventDate = new Date(currentDate);
+//         eventDate.setHours(timeHours, timeMinutes, 0, 0);
 
-        events.push({
-          scheduleId: schedule.id,
-          title: schedule.title,
-          date: eventDate,
-          isRegularOccurrence: true,
-          teacher_id: schedule.teacher_id,
-          visitor: schedule.student_id
-            ? schedule.student!.name
-            : schedule.group!.title,
-          is_group: schedule.is_group,
-        });
+//         events.push({
+//           scheduleId: schedule.id,
+//           title: schedule.title,
+//           date: eventDate,
+//           isRegularOccurrence: true,
+//           teacher_id: schedule.teacher_id,
+//           visitor: schedule.student_id
+//             ? schedule.student!.name
+//             : schedule.group!.title,
+//           is_group: schedule.is_group,
+//         });
 
-        currentDate.setDate(currentDate.getDate() + 7);
-      }
-    }
-  }
+//         currentDate.setDate(currentDate.getDate() + 7);
+//       }
+//     }
+//   }
 
-  return events.sort((a, b) => a.date.getTime() - b.date.getTime());
-}
+//   return events.sort((a, b) => a.date.getTime() - b.date.getTime());
+// }
 </script>
 
 <style scoped></style>
