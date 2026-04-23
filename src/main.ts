@@ -8,7 +8,7 @@ import ToastService from "primevue/toastservice";
 import "primeicons/primeicons.css";
 import { initSession } from "./lib/session";
 
-await initSession();
+initSession();
 
 createApp(App)
   .use(router)
