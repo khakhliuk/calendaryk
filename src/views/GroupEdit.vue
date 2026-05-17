@@ -148,7 +148,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import type { TeacherStudentsGet } from "../models/teacherStudentsGet.js";
 import type { GroupMember } from "../models/getGroupsModel.js";
 import type { ShortScheduleModel } from "../models/getShortSchedule.js";
@@ -156,6 +156,7 @@ import { useToast } from "primevue/usetoast";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
 import { useBackButton } from "vue-tg";
+import { session } from "../lib/session.js";
 
 interface GroupForm {
   title: string;
@@ -163,6 +164,7 @@ interface GroupForm {
   schedules: ShortScheduleModel[];
 }
 
+const supabase = createSupabaseDbClient();
 const now = new Date();
 now.setMinutes(0);
 
@@ -228,10 +230,7 @@ const confirmDialog = async () => {
 const loadStudents = async () => {
   try {
     savingLoading.value = true;
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = session.value?.user;
 
     const { data: relations, error: relError } = await supabase
       .from("teachers_students")
@@ -244,7 +243,6 @@ const loadStudents = async () => {
 
     if (!relations || relations.length === 0) {
       allStudents.value = [];
-      console.log("there no relations!");
       return;
     }
 
@@ -490,7 +488,6 @@ async function loadGroup() {
       .single();
 
     if (error) throw error;
-    console.log(data);
 
     form.value.title = data.title;
     form.value.schedules = data.schedule.map((item: any) => ({

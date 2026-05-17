@@ -59,6 +59,7 @@
 import { ref, onMounted } from "vue";
 import { supabase } from "../lib/supabaseClient.js";
 import router from "../router/index.js";
+import { isTeacher } from "../lib/session.js";
 
 import { useMiniApp } from "vue-tg";
 const miniApp = useMiniApp();
@@ -77,14 +78,13 @@ const dopinfo = ref("");
 const login = async () => {
   try {
     const { data: loginData, error } = await supabase.functions.invoke(
-      "telegram-login",
+      import.meta.env.DEV ? "telegram-login-test" : "telegram-login",
       {
         body: {
           initData: miniApp.initData,
         },
       },
     );
-    console.log("miniApp.initData", miniApp.initData);
 
     if (error) {
       throw error;
@@ -101,9 +101,13 @@ const login = async () => {
 
       switch (action) {
         case "connect":
-          router.push(
-            `/connect?id=${teacherId}&telegramId=${telegramId.value}&username=${user.username}`,
-          );
+          if (isTeacher.value) await signInAndProceed();
+          else {
+            miniApp.initDataUnsafe.start_param = "";
+            router.push(
+              `/connect?id=${teacherId}&telegramId=${telegramId.value}&username=${user.username}`,
+            );
+          }
       }
     } else {
       if (parsed.exists) {

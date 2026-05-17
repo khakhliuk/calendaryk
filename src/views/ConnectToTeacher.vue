@@ -108,14 +108,6 @@
           Ваші дані потрібні лише для керівника
         </p>
       </div>
-      <!-- <Button
-        v-else
-        label="На головну"
-        severity="info"
-        raised
-        class="w-full mt-3"
-        @click="signInAndConnect(false)"
-      /> -->
     </div>
   </div>
 </template>
@@ -161,6 +153,7 @@ const handleConnect = async () => {
 
     await register();
   } catch (e) {
+    console.error(e);
     toast.add({
       severity: "error",
       summary: "Помилка: \n" + e,
@@ -174,7 +167,7 @@ const handleConnect = async () => {
 const register = async () => {
   try {
     const { data: loginData, error: userError } =
-      await supabase.functions.invoke("telegram-login", {
+      await supabase.functions.invoke("telegram-login-test", {
         body: {
           initData: miniApp.initData,
         },
@@ -207,6 +200,7 @@ const register = async () => {
 
     await signInAndConnect();
   } catch (er) {
+    console.error(er);
     toast.add({
       severity: "error",
       summary: "Помилка: \n" + er,
@@ -282,7 +276,7 @@ const prepareData = async () => {
     form.value.teacherName = teacherData.name;
 
     const { data: loginData, error: userError } =
-      await supabase.functions.invoke("telegram-login", {
+      await supabase.functions.invoke("telegram-login-test", {
         body: {
           initData: miniApp.initData,
         },
@@ -311,8 +305,7 @@ const prepareData = async () => {
         .from("teachers_students")
         .select()
         .eq("teacher_id", connectTeacherId.value)
-        .eq("student_id", userData.user_id)
-        .maybeSingle();
+        .eq("student_id", userData.user_id);
 
       if (connectError) {
         throw connectError;
@@ -324,7 +317,8 @@ const prepareData = async () => {
           summary: "Ви вже приєднані до цього керівника!",
           life: 3000,
         });
-        await signInAndConnect(false);
+
+        router.push("/");
       }
     }
   } catch (error) {

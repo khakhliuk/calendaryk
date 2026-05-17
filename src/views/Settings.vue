@@ -93,6 +93,8 @@
         label="Зберегти"
         severity="info"
         raised
+        :loading="saving"
+        :disabled="!changes"
         class="w-full"
         @click="save"
       />
@@ -101,12 +103,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
+import { ref, onMounted, watch } from "vue";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import { useToast } from "primevue/usetoast";
 import { useBackButton } from "vue-tg";
 import { useRouter } from "vue-router";
+import { session } from "../lib/session.js";
 
+const supabase = createSupabaseDbClient();
 const router = useRouter();
 const backButton = useBackButton();
 const toast = useToast();
@@ -117,6 +121,7 @@ backButton?.onClick?.(() => {
 });
 
 const saving = ref(false);
+const changes = ref(false);
 const minuteOptions = [5, 15, 30, 60];
 
 const form = ref({
@@ -129,10 +134,7 @@ const form = ref({
 onMounted(async () => {
   saving.value = true;
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const user = session.value?.user;
     if (!user) throw "Користувача не знайдено";
 
     const { data: userData, error: userError } = await supabase
@@ -167,6 +169,14 @@ onMounted(async () => {
     });
   } finally {
     saving.value = false;
+
+    watch(
+      form,
+      () => {
+        changes.value = true;
+      },
+      { deep: true },
+    );
   }
 });
 

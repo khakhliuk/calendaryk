@@ -43,9 +43,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import { useMiniApp } from "vue-tg";
-
+import { session } from "../lib/session.js";
+import { useToast } from "primevue/usetoast";
+import { useBackButton } from "vue-tg";
+const backButton = useBackButton();
+backButton?.hide?.();
+const toast = useToast();
+const supabase = createSupabaseDbClient();
 const miniApp = useMiniApp();
 
 const teachers = ref<
@@ -73,15 +79,12 @@ onMounted(async () => {
 
 const getData = async () => {
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    const user = session.value?.user;
 
     const { data: relations } = await supabase
       .from("teachers_students")
       .select("teacher_id")
-      .eq("student_id", user.id);
+      .eq("student_id", user!.id);
 
     if (!relations?.length) return;
 
@@ -93,9 +96,13 @@ const getData = async () => {
       .in("user_id", teacherIds);
 
     if (data) teachers.value = data;
-    console.log(data);
-  } catch (er) {
+  } catch (er: any) {
     console.error(er);
+    toast.add({
+      severity: "error",
+      summary: "Помилка: \n" + er.message,
+      life: 3000,
+    });
   }
 };
 

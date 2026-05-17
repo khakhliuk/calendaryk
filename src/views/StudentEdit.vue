@@ -27,6 +27,13 @@
           </div>
         </div>
       </div>
+      <PaidLessons
+        :value="form.paid_lessons ?? null"
+        @save="
+          (val: number | null) => savePaidLessons(form.student?.user_id, val)
+        "
+        @disable="disablePaidLessons(form.student?.user_id)"
+      />
       <div class="space-y-1 mb-4">
         <label class="block text-sm font-medium text-gray-700"> Розклад </label>
         <div class="space-y-1 border border-gray-300 rounded-lg p-3">
@@ -109,7 +116,7 @@
         </div>
       </div>
 
-      <div class="text-xl space-y-2 pt-5">
+      <div class="text-xl space-y-2 pt-2">
         <!-- <Button
           label="Зберегти"
           severity="info"
@@ -155,14 +162,11 @@
           />
         </div>
         <label class="text-xs text-gray-500">Назва</label>
-        <InputText
-          v-model="dialogTitle"
-          placeholder="лінк.юа/..."
-          class="w-full"
-        />
+        <InputText v-model="dialogTitle" class="w-full" />
       </div>
 
       <div v-else>
+        <label class="text-xs text-gray-500">Дата і час</label>
         <DatePicker
           v-model="selectedOneTime"
           hourFormat="24"
@@ -183,6 +187,7 @@
       icon="pi pi-plus"
       severity="info"
       label="Створити"
+      :disabled="!canCreate"
       @click="confirmDialog"
       class="w-full mt-3"
     />
@@ -192,7 +197,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import type { ShortScheduleModel } from "../models/getShortSchedule.js";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
@@ -205,8 +210,10 @@ interface StudentForm {
   student: User | null;
   regularSchedules: ShortScheduleModel[];
   attendances: Attendance[];
+  paid_lessons: number | null;
 }
 
+const supabase = createSupabaseDbClient();
 const router = useRouter();
 const route = useRoute();
 const backButton = useBackButton();
@@ -243,8 +250,21 @@ const form = ref<StudentForm>({
   student: null,
   regularSchedules: [],
   attendances: [],
+  paid_lessons: null,
 });
 const savingLoading = ref(false);
+
+const canCreate = computed(() => {
+  if (isDialogSchedule.value) {
+    return (
+      selectedDay.value !== null &&
+      selectedTime.value !== null &&
+      dialogTitle.value?.trim() !== ""
+    );
+  } else {
+    return selectedOneTime.value !== null;
+  }
+});
 
 onMounted(async () => {
   if (studentId.value === undefined) {
@@ -259,6 +279,42 @@ const openDialog = async (isSchedule: boolean) => {
   showDialog.value = true;
   dialogTitle.value = form.value.student?.name;
   isDialogSchedule.value = isSchedule;
+};
+
+const savePaidLessons = async (
+  id: string | undefined,
+  value: number | null,
+) => {
+  try {
+    const { error } = await supabase
+      .from("teachers_students")
+      .update({ paid_lessons: value })
+      .eq("student_id", id);
+
+    if (error) {
+      throw error;
+    }
+
+    if (value != null)
+      toast.add({
+        severity: "success",
+        summary: "Успішно збережено",
+        life: 3000,
+      });
+  } catch (error) {
+    console.error(error);
+    toast.add({
+      severity: "error",
+      summary: "Помилка збереження",
+      life: 3000,
+    });
+  } finally {
+    await prepareData();
+  }
+};
+
+const disablePaidLessons = async (id: string | undefined) => {
+  await savePaidLessons(id, null);
 };
 
 const confirmDialog = async () => {
@@ -301,9 +357,16 @@ const prepareData = async () => {
       .is("schedule_id", null)
       .eq("status", "scheduled");
 
+    const { data } = await supabase
+      .from("teachers_students")
+      .select("paid_lessons")
+      .eq("student_id", studentId.value)
+      .single();
+
     form.value.student = student;
     form.value.regularSchedules = student.schedule;
     form.value.attendances = attendances ?? [];
+    form.value.paid_lessons = data?.paid_lessons ?? null;
   } catch (error) {
     toast.add({
       severity: "error",

@@ -20,13 +20,21 @@ export interface GetScheduleModel {
   }[];
 }
 
-export interface CalEvent {
+export type EventStudent = {
+  user_id: string;
+  name: string;
+};
+
+export type CalEvent = {
   start: string;
   end: string;
   title: string;
   class: string;
   status: string;
-  students: { user_id: string; name: string }[];
-  attendance_id: string | null;
-  link?: string;
-}
+
+  students: EventStudent[];
+
+  attendance_id?: string | null;
+  note?: string | null;
+  link?: string | null;
+};

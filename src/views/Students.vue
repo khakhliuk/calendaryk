@@ -196,7 +196,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
 import { useRoute, useRouter } from "vue-router";
@@ -206,9 +206,11 @@ import type { Schedule } from "../models/schedule.js";
 import { useToast } from "primevue/usetoast";
 import { useMiniApp } from "vue-tg";
 import { useBackButton } from "vue-tg";
+import { session } from "../lib/session.js";
 const backButton = useBackButton();
 backButton?.hide?.();
 
+const supabase = createSupabaseDbClient();
 const miniApp = useMiniApp();
 const toast = useToast();
 const route = useRoute();
@@ -316,9 +318,7 @@ const openEditStudent = async (studentId: string) => {
 
 const getData = async () => {
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = session.value?.user;
 
     const { data: relations, error: relError } = await supabase
       .from("teachers_students")
@@ -413,7 +413,7 @@ const share = async () => {
   }
 
   const text = `📚 Приєднуйтесь до керівника ${userData.name}`;
-  const link = `https://t.me/calendarykTestBot?startapp=connect_${user!.id}`;
+  const link = `https://t.me/CalendarykBot?startapp=connect_${user!.id}`;
   const url = encodeURIComponent(link);
   const encodedText = encodeURIComponent(text);
   miniApp.openTelegramLink(

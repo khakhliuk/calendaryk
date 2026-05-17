@@ -25,6 +25,7 @@ export type GroupedAttendance = {
   schedule_id: string | null;
   schedule: GetHistoryAttendance["schedule"] | null;
   date: Date;
+  status: string;
   students: {
     attendance_id: string;
     student_id: string;

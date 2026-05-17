@@ -4,17 +4,19 @@
     <div class="px-4 py-2">
       <h2 class="text-lg font-semibold text-gray-900 mb-1">Історія занять</h2>
       <div class="space-y-1">
-        <!-- <Select
-          v-model="filterStudent"
+        <Select
+          v-model="selectedStudent"
           :options="allStudents"
           optionLabel="name"
           filter
+          showClear
+          checkmark
           placeholder="Оберіть учня для фільтрації"
           class="w-full multiselect-multiline"
-        /> -->
+        />
         <div class="flex space-x-2">
           <div class="flex-auto mb-1">
-            <label for="buttondisplay" class="mb-2 text-gray-700">
+            <label for="buttondisplay" class="mb-2 text-sm text-gray-700">
               Дата з
             </label>
             <DatePicker
@@ -28,7 +30,7 @@
           </div>
 
           <div class="flex-auto">
-            <label for="buttondisplay" class="mb-2 text-gray-700">
+            <label for="buttondisplay" class="mb-2 text-sm text-gray-700">
               Дата по
             </label>
             <DatePicker
@@ -41,9 +43,20 @@
             />
           </div>
         </div>
+        <span class="text-sm">
+          <span class="text-blue-500 font-medium">
+            Відбулось: {{ happenedCount }}
+          </span>
+
+          <span v-if="canceledCount > 0" class="text-gray-400 mx-1">·</span>
+
+          <span v-if="canceledCount > 0" class="text-red-500 font-medium">
+            Скасовано: {{ canceledCount }}
+          </span>
+        </span>
         <div
-          v-if="attendances.length !== 0"
-          v-for="item in attendances"
+          v-if="filteredAttendances.length !== 0"
+          v-for="item in filteredAttendances"
           class="rounded-lg p-2 text-gray-700 border-l-4 shadow-sm"
           :class="
             item.students.every((s) => s.status === 'happened')
@@ -54,36 +67,37 @@
                 ? 'border-yellow-400'
                 : 'border-red-400 bg-red-50'
           "
+          @click="
+            (e) => {
+              menuStudent = item.students[0];
+              contextMenu.toggle(e);
+            }
+          "
         >
-          <div class="flex flex-row justify-between">
-            <div class="flex flex-row">
-              <div class="flex flex-col text-sm text-gray-800">
-                <div class="flex items-center">
-                  <i class="pi pi-clock mr-1" style="font-size: 1rem"></i>
+          <div class="flex flex-col justify-between overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <i class="pi pi-clock mr-1" style="font-size: 1rem"></i>
 
-                  <span>{{ format(item.date, " HH:mm, dd.MM.yyyy") }}</span>
-                  <span
-                    v-if="
-                      item.students.length === 1 &&
-                      item.students[0].status === 'canceled'
-                    "
-                    class="font-semibold text-red-500 ml-2"
-                  >
-                    Скасовано
-                  </span>
-                </div>
-
-                <div v-if="item.students.length === 1">
-                  <span class="truncate">{{ item.students[0].name }}</span>
-                </div>
-                <span v-if="item.schedule">{{
-                  item.schedule.groups?.title
-                }}</span>
+                <span>{{ format(item.date, "dd.MM.yyyy, HH:mm") }}</span>
               </div>
+              <span
+                v-if="
+                  item.students.length === 1 &&
+                  item.students[0].status === 'canceled'
+                "
+                class="font-semibold text-red-500 ml-2"
+              >
+                Скасовано
+              </span>
             </div>
-
-            <div class="flex justify-between items-center">
-              <Button
+            <span v-if="item.students.length === 1" class="truncate block">{{
+              item.students[0].name
+            }}</span>
+            <span v-if="item.schedule" class="truncate block">{{
+              item.schedule.groups?.title
+            }}</span>
+            <!-- <Button
                 v-if="item.students.length > 1"
                 icon="pi pi-chevron-down"
                 severity="secondary"
@@ -111,9 +125,9 @@
                 rounded
                 aria-label="Cancel"
                 @click="updateStatus(item.students[0])"
-              />
+              /> -->
 
-              <!-- <Button
+            <!-- <Button
                 v-else
                 type="button"
                 size="small"
@@ -129,9 +143,8 @@
                 variant="text"
                 severity="contrast"
               /> -->
-            </div>
           </div>
-          <div
+          <!-- <div
             class="flex flex-col space-y-1 mt-1"
             v-if="item.students.length > 1 && item.showStudents"
           >
@@ -151,7 +164,7 @@
                 binary
               />
             </div>
-          </div>
+          </div> -->
         </div>
 
         <div v-else class="text-center py-10">
@@ -166,56 +179,88 @@
 
 <script setup lang="ts">
 import { ref, onMounted, type Ref, watch, computed } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
 import type { User } from "../models/user.js";
 import type {
   GetHistoryAttendance,
   GroupedAttendance,
 } from "../models/getHistoryAttendance.js";
+import { useRouter } from "vue-router";
+import { session } from "../lib/session.js";
+const router = useRouter();
 
+const supabase = createSupabaseDbClient();
+const contextMenu = ref();
 const attendances: Ref<GroupedAttendance[]> = ref([]);
-const filterStudent: Ref<User | null> = ref(null);
+const selectedStudent: Ref<User | null> = ref(null);
 const allStudents: Ref<User[]> = ref([]);
+
+const filteredAttendances = computed(() => {
+  if (!selectedStudent.value) {
+    return attendances.value;
+  }
+
+  return attendances.value.filter(
+    (attendance) =>
+      attendance.students[0].student_id === selectedStudent.value!.user_id,
+  );
+});
 
 const now = new Date();
 const startDate = ref(new Date(now.getFullYear(), now.getMonth(), 1));
 const endDate = ref(new Date());
-
-//const contextMenu = ref();
 const menuStudent = ref<any>(null);
+
+const happenedCount = computed(
+  () => filteredAttendances.value.filter((a) => a.status === "happened").length,
+);
+
+const canceledCount = computed(
+  () => filteredAttendances.value.filter((a) => a.status === "canceled").length,
+);
 
 const items = computed(() => [
   {
     label: "Опції",
     items: [
       {
-        label:
-          menuStudent.value?.status === "happened"
-            ? "Відмітити як скасоване"
-            : "Відбулося",
-        icon: "pi pi-times",
+        label: "Відкрити картку учня",
+        icon: "pi pi-user",
         command: () => {
-          updateStatus(menuStudent.value);
+          router.push({
+            name: "StudentEdit",
+            params: { id: menuStudent.value.student_id },
+          });
         },
       },
+      // {
+      //   label:
+      //     menuStudent.value?.status === "happened"
+      //       ? "Відмітити як скасоване"
+      //       : "Відбулося",
+      //   icon: "pi pi-times",
+      //   command: () => {
+      //     updateStatus(menuStudent.value);
+      //   },
+      // },
     ],
   },
 ]);
 
-const updateStatus = async (student: any) => {
-  const newStatus = student.status === "happened" ? "canceled" : "happened";
-  const { error } = await supabase
-    .from("attendances")
-    .update({ status: newStatus })
-    .eq("id", student.attendance_id);
+// const updateStatus = async (student: any) => {
+//   const newStatus = student.status === "happened" ? "canceled" : "happened";
+//   const { error } = await supabase
+//     .from("attendances")
+//     .update({ status: newStatus })
+//     .eq("id", student.attendance_id);
 
-  if (error) {
-    console.error("Error updating status:", error);
-  } else {
-    student.status = newStatus;
-  }
-};
+//   if (error) {
+//     console.error("Error updating status:", error);
+//   } else {
+//     student.status = newStatus;
+//   }
+// };
 
 onMounted(async () => {
   await getData();
@@ -223,9 +268,7 @@ onMounted(async () => {
 });
 
 const getStudents = async () => {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = session.value?.user;
 
   const { data: relations, error: relError } = await supabase
     .from("teachers_students")
@@ -239,7 +282,6 @@ const getStudents = async () => {
 
   if (!relations || relations.length === 0) {
     allStudents.value = [];
-    console.log("there no relations!");
     return;
   }
 
@@ -258,14 +300,13 @@ const getStudents = async () => {
 
   if (studentsData) {
     allStudents.value = studentsData;
+    console.log("Loaded students:", studentsData);
   }
 };
 
 const getData = async () => {
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = session.value?.user;
 
     endDate.value.setHours(23);
     endDate.value.setMinutes(59);
@@ -320,7 +361,6 @@ const getData = async () => {
     }));
 
     attendances.value = groupAttendance(normalizedData);
-    console.log(data);
   } catch (error) {
     console.error("Error loading schedule:", error);
   }
@@ -336,6 +376,7 @@ function groupAttendance(records: GetHistoryAttendance[]): GroupedAttendance[] {
         schedule_id: null,
         schedule: null,
         date: record.date,
+        status: record.status,
         students: [
           {
             attendance_id: record.id,
@@ -361,6 +402,7 @@ function groupAttendance(records: GetHistoryAttendance[]): GroupedAttendance[] {
         schedule_id: record.schedule.id,
         schedule: record.schedule,
         date: record.date,
+        status: record.status,
         students: [],
         showStudents: false,
       });
@@ -379,9 +421,11 @@ function groupAttendance(records: GetHistoryAttendance[]): GroupedAttendance[] {
   return Array.from(map.values());
 }
 
-watch([filterStudent, startDate, endDate], async () => {
+watch([startDate, endDate], async () => {
   await getData();
 });
+
+watch([selectedStudent], async () => {});
 </script>
 
 <style scoped></style>

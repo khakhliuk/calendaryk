@@ -135,19 +135,20 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import EventDetailsModal from "../components/EventDetailsModal.vue";
-import { supabase } from "../lib/supabaseClient.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient.js";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
 import { isTeacher } from "../lib/session";
 const calRef = ref();
 
+import { useBackButton } from "vue-tg";
 import VueCal from "vue-cal";
 import "vue-cal/dist/vuecal.css";
 import type { CalEvent } from "../models/getScheduleModel.js";
 import { useToast } from "primevue/usetoast";
-const toast = useToast();
 
-import { useBackButton } from "vue-tg";
+const toast = useToast();
+const supabase = createSupabaseDbClient();
 const backButton = useBackButton();
 backButton?.hide?.();
 
@@ -190,8 +191,8 @@ const scrollToCurrent = () => {
 };
 
 const goToToday = () => {
-  selectedDate.value = new Date();
   calRef.value?.switchView("day", new Date());
+  selectedDate.value = new Date();
 };
 
 const updateView = async (e: {
@@ -213,7 +214,6 @@ const updateView = async (e: {
 };
 
 const onEventClick = async (event: CalEvent) => {
-  console.log("Clicked event:", event);
   selectedEvent.value = event;
   showModal.value = true;
 };
@@ -236,6 +236,7 @@ const getData = async (
         status,
         student_id,
         link,
+        note,
         student:users!attendances_student_id_fkey(user_id, name),
         schedule:schedule!schedule_id(
           id, start_date, title, group_id, is_group,
@@ -248,7 +249,6 @@ const getData = async (
       .eq(isTeacher.value ? "teacher_id" : "student_id", user!.id);
 
     if (attendanceError) throw attendanceError;
-
     const { data: schedules, error: scheduleError } = await supabase
       .from("schedule")
       .select(
@@ -269,6 +269,7 @@ const getData = async (
       new Date(endStr),
     );
   } catch (error) {
+    console.error(error);
     toast.add({
       severity: "error",
       summary: "Помилка: \n" + error,
@@ -284,43 +285,47 @@ function buildCalEvents(
   rangeEnd: Date,
 ): CalEvent[] {
   const map = new Map<string, CalEvent>();
-  const realKeys = new Set<string>();
 
   for (const row of attendances) {
     const schedule = row.schedule;
     const student = row.student;
+
     const startDate = new Date(row.date);
     const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
-    const key = schedule?.id
-      ? `${schedule.id}_${format(startDate, "yyyy-MM-dd")}`
-      : row.id;
+    const dateKey = format(startDate, "yyyy-MM-dd");
+    const key = schedule?.id ? `${schedule.id}_${dateKey}` : `single_${row.id}`;
 
     if (!map.has(key)) {
       map.set(key, {
         start: format(startDate, "yyyy-MM-dd HH:mm"),
         end: format(endDate, "yyyy-MM-dd HH:mm"),
-        title: schedule?.title ?? student?.name,
+        title: schedule?.title ?? student?.name ?? "Заняття",
         class: schedule?.is_group ? "event-group" : "event-individual",
         status: row.status,
         students: [],
-        attendance_id: row.id,
+        note: row.note,
         link: row.link,
+        attendance_id: row.id,
       });
     }
 
-    if (student)
-      map.get(key)!.students.push({ ...student, status: row.status });
+    const event = map.get(key)!;
 
-    const dateKey = format(startDate, "yyyy-MM-dd");
-    realKeys.add(`${row.student_id}_${dateKey}`);
+    if (student) {
+      event.students.push({
+        user_id: student.user_id,
+        name: student.name,
+      });
+    }
   }
 
   for (const schedule of schedules) {
     const startDate = new Date(schedule.start_date);
+
     const dayOfWeek = startDate.getUTCDay();
-    const timeH = startDate.getUTCHours();
-    const timeM = startDate.getUTCMinutes();
+    const hours = startDate.getUTCHours();
+    const minutes = startDate.getUTCMinutes();
 
     const students = Array.isArray(schedule.students)
       ? schedule.students
@@ -329,7 +334,8 @@ function buildCalEvents(
         : [];
 
     const cursor = new Date(rangeStart);
-    cursor.setUTCHours(timeH, timeM, 0, 0);
+    cursor.setUTCHours(hours, minutes, 0, 0);
+
     while (cursor.getUTCDay() !== dayOfWeek) {
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
@@ -338,20 +344,24 @@ function buildCalEvents(
       const dateKey = format(cursor, "yyyy-MM-dd");
       const key = `${schedule.id}_${dateKey}`;
 
-      const alreadyReal = students.some((s: any) =>
-        realKeys.has(`${s.user_id}_${dateKey}`),
-      );
-
-      if (!map.has(key) && !alreadyReal) {
+      if (!map.has(key)) {
         const endCursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+
         map.set(key, {
           start: format(cursor, "yyyy-MM-dd HH:mm"),
           end: format(endCursor, "yyyy-MM-dd HH:mm"),
           title: schedule.title,
           class: schedule.is_group ? "event-group" : "event-individual",
           status: "scheduled",
-          students: students.map((s: any) => ({ ...s, status: "scheduled" })),
-          attendance_id: null,
+          students: students.map((s: any) => ({
+            user_id: s.user_id,
+            name: s.name,
+            status: "scheduled",
+            attendance_id: null,
+            note: null,
+          })),
+          note: null,
+          link: null,
         });
       }
 
@@ -359,7 +369,9 @@ function buildCalEvents(
     }
   }
 
-  return Array.from(map.values());
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+  );
 }
 
 const isToday = (date: Date | string): boolean => {
