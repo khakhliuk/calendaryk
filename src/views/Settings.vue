@@ -209,6 +209,7 @@ const save = async () => {
     if (settingsError) throw settingsError;
 
     toast.add({ severity: "success", summary: "Збережено", life: 2000 });
+    changes.value = false;
   } catch (e) {
     toast.add({
       severity: "error",
