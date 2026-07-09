@@ -167,11 +167,14 @@ const handleConnect = async () => {
 const register = async () => {
   try {
     const { data: loginData, error: userError } =
-      await supabase.functions.invoke("telegram-login-test", {
-        body: {
-          initData: miniApp.initData,
+      await supabase.functions.invoke(
+        import.meta.env.DEV ? "telegram-login-test" : "telegram-login",
+        {
+          body: {
+            initData: miniApp.initData,
+          },
         },
-      });
+      );
 
     if (userError) {
       throw userError;
