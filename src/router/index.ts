@@ -1,26 +1,53 @@
-import { createRouter, createWebHistory } from "vue-router";
-import Home from "../views/Home.vue";
-import LogIn from "../views/Login.vue";
-import Students from "../views/Students.vue";
-import GroupEdit from "../views/GroupEdit.vue";
-import Settings from "../views/Settings.vue";
-import StudentEdit from "../views/StudentEdit.vue";
-import ConnectToTeacher from "../views/ConnectToTeacher.vue";
-import History from "../views/History.vue";
-import Teacher from "../views/Teacher.vue";
-import NotFound from "../views/404.vue";
+import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
+import Login from "../views/Login.vue";
 
-const routes = [
-  { path: "/", name: "Login", component: LogIn },
-  { path: "/connect", name: "ConnectToTeacher", component: ConnectToTeacher },
-  { path: "/dashboard", name: "Home", component: Home },
-  { path: "/history", name: "History", component: History },
-  { path: "/students", name: "Students", component: Students },
-  { path: "/group", name: "GroupEdit", component: GroupEdit },
-  { path: "/settings", name: "Settings", component: Settings },
-  { path: "/student", name: "StudentEdit", component: StudentEdit },
-  { path: "/teacher", name: "Teacher", component: Teacher },
-  { path: "/404", name: "NotFound", component: NotFound },
+const routes: RouteRecordRaw[] = [
+  { path: "/", name: "Login", component: Login },
+  {
+    path: "/connect",
+    name: "ConnectToTeacher",
+    component: () => import("../views/ConnectToTeacher.vue"),
+  },
+  {
+    path: "/dashboard",
+    name: "Home",
+    component: () => import("../views/Home.vue"),
+  },
+  {
+    path: "/history",
+    name: "History",
+    component: () => import("../views/History.vue"),
+  },
+  {
+    path: "/students",
+    name: "Students",
+    component: () => import("../views/Students.vue"),
+  },
+  {
+    path: "/group/:id?",
+    name: "GroupEdit",
+    component: () => import("../views/GroupEdit.vue"),
+  },
+  {
+    path: "/student/:id",
+    name: "StudentEdit",
+    component: () => import("../views/StudentEdit.vue"),
+  },
+  {
+    path: "/settings",
+    name: "Settings",
+    component: () => import("../views/Settings.vue"),
+  },
+  {
+    path: "/teacher",
+    name: "Teacher",
+    component: () => import("../views/Teacher.vue"),
+  },
+  {
+    path: "/:pathMatch(.*)*",
+    name: "NotFound",
+    component: () => import("../views/NotFound.vue"),
+  },
 ];
 
 const router = createRouter({

@@ -1,4 +1,4 @@
 export interface ShortScheduleModel {
   id: string;
-  start_date: Date;
+  start_date: string;
 }

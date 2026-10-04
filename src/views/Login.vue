@@ -9,10 +9,10 @@
         <p class="text-gray-600 mb-3">
           Ви збираєтесь продовжити реєстрацію як:
         </p>
-        <SelectButton v-model="value" :options="options" class="mb-5" />
+        <SelectButton v-model="role" :options="ROLES" class="mb-5" />
       </div>
 
-      <div v-if="value === 'Керівник'" class="space-y-2">
+      <div v-if="role === TEACHER_ROLE" class="space-y-2">
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium uppercase tracking-widest">
             Повне ім'я
@@ -30,7 +30,7 @@
           />
         </div>
         <Button
-          @click="register()"
+          @click="registerTeacher"
           severity="info"
           class="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-8"
         >
@@ -50,123 +50,104 @@
     v-else
     class="min-h-screen bg-white flex items-center justify-center px-4"
   >
-    <p v-if="!dopinfo" class="text-gray-600 mb-8">Завантаження...</p>
-    <p v-else class="text-gray-600 mb-8">{{ dopinfo }}</p>
+    <p class="text-gray-600 mb-8">{{ errorText || "Завантаження..." }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
-import router from "../router/index.js";
-import { isTeacher } from "../lib/session.js";
-
+import { useRouter } from "vue-router";
 import { useMiniApp } from "vue-tg";
+import { isTeacher } from "../lib/session";
+import { useNotify } from "../composables/useNotify";
+import {
+  registerUser,
+  signInWithTelegram,
+  telegramLogin,
+  type TelegramUserInfo,
+} from "../services/auth";
+import { getErrorMessage } from "../utils/strings";
+
+const TEACHER_ROLE = "Керівник";
+const ROLES = [TEACHER_ROLE, "Учень"];
+
+const router = useRouter();
 const miniApp = useMiniApp();
-import { useToast } from "primevue/usetoast";
-const toast = useToast();
+const notify = useNotify();
 
-const telegramId = ref<string>("");
-const telegramuUsername = ref<string>("");
-const username = ref<string>("");
+const telegramUser = ref<TelegramUserInfo | null>(null);
+const username = ref("");
+const role = ref(TEACHER_ROLE);
 const loading = ref(true);
-const value = ref("Керівник");
-const options = ref(["Керівник", "Учень"]);
+const errorText = ref("");
 
-const dopinfo = ref("");
+const signInAndProceed = async () => {
+  if (!telegramUser.value) return;
+
+  await signInWithTelegram(telegramUser.value.id);
+  router.push("/dashboard");
+};
+
+// Посилання-запрошення від вчителя має вигляд startapp=connect_<teacherId>
+const handleStartParam = async (startParam: string) => {
+  const [action, teacherId] = startParam.split("_");
+  if (action !== "connect" || !telegramUser.value) return;
+
+  if (isTeacher.value) {
+    await signInAndProceed();
+    return;
+  }
+
+  miniApp.initDataUnsafe.start_param = "";
+  router.push({
+    name: "ConnectToTeacher",
+    query: {
+      id: teacherId,
+      telegramId: String(telegramUser.value.id),
+      username: telegramUser.value.username,
+    },
+  });
+};
 
 const login = async () => {
   try {
-    const { data: loginData, error } = await supabase.functions.invoke(
-      import.meta.env.DEV ? "telegram-login-test" : "telegram-login",
-      {
-        body: {
-          initData: miniApp.initData,
-        },
-      },
-    );
+    const { userInfo, exists } = await telegramLogin(miniApp.initData);
+    telegramUser.value = userInfo;
 
-    if (error) {
-      throw error;
-    }
-
-    const parsed = JSON.parse(loginData);
-    const user = parsed.userInfo;
-    telegramId.value = user.id;
-    telegramuUsername.value = user.username;
-
-    if (miniApp.initDataUnsafe.start_param) {
-      const startParam = miniApp.initDataUnsafe.start_param;
-      const [action, teacherId] = startParam.split("_");
-
-      switch (action) {
-        case "connect":
-          if (isTeacher.value) await signInAndProceed();
-          else {
-            miniApp.initDataUnsafe.start_param = "";
-            router.push(
-              `/connect?id=${teacherId}&telegramId=${telegramId.value}&username=${user.username}`,
-            );
-          }
-      }
+    const startParam = miniApp.initDataUnsafe.start_param;
+    if (startParam) {
+      await handleStartParam(startParam);
+    } else if (exists) {
+      await signInAndProceed();
     } else {
-      if (parsed.exists) {
-        await signInAndProceed();
-      } else {
-        loading.value = false;
-      }
+      loading.value = false;
     }
-  } catch (e) {
-    dopinfo.value = e as string;
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + e,
-      life: 3000,
-    });
+  } catch (error) {
+    errorText.value = getErrorMessage(error);
+    notify.error("Помилка входу", error);
   }
 };
 
-const register = async () => {
+const registerTeacher = async () => {
+  if (!telegramUser.value) return;
+
+  if (!username.value.trim()) {
+    notify.warn("Введіть ваше ім'я");
+    return;
+  }
+
   try {
-    const { error } = await supabase.functions.invoke("register", {
-      body: {
-        userData: {
-          telegramId: telegramId.value,
-          is_teacher: true,
-          telegram_username: telegramuUsername.value,
-          fullName: username.value,
-        },
-      },
+    await registerUser({
+      telegramId: String(telegramUser.value.id),
+      is_teacher: true,
+      telegram_username: telegramUser.value.username,
+      fullName: username.value.trim(),
     });
-
-    if (error) {
-      return;
-    }
-
-    signInAndProceed();
-  } catch (er) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + er,
-      life: 3000,
-    });
+    await signInAndProceed();
+  } catch (error) {
+    notify.error("Помилка реєстрації", error);
   }
 };
 
-const signInAndProceed = async () => {
-  const { error } = await supabase.auth.signInWithPassword({
-    email: `tg_${telegramId.value}@example.com`,
-    password: String(telegramId.value),
-  });
-
-  if (!error) {
-    router.push("/dashboard");
-  }
-};
-
-onMounted(async () => {
-  await login();
-});
+onMounted(login);
 </script>
-
-<style scoped></style>

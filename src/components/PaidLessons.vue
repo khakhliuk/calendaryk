@@ -52,10 +52,10 @@ const emit = defineEmits<{
   disable: [];
 }>();
 
-const initialValue = ref(props.value ?? 0);
-const hasChanges = computed(() => inputValue.value !== initialValue.value);
 const enabled = ref(props.value !== null);
 const inputValue = ref(props.value ?? 0);
+const initialValue = ref(props.value ?? 0);
+const hasChanges = computed(() => inputValue.value !== initialValue.value);
 
 watch(
   () => props.value,

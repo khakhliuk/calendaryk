@@ -1,20 +1,18 @@
 <template>
   <div class="px-4 py-2 bg-gray-100 h-full">
-    <!-- Header -->
     <div class="mb-2">
       <h1 class="text-2xl font-bold text-gray-900">
         {{ isEditMode ? "Редагувати групу" : "Створити групу" }}
       </h1>
     </div>
 
-    <!-- Form -->
     <div class="bg-white rounded-lg shadow-sm px-4 py-1 space-y-3">
-      <!-- Назва групи -->
       <div>
         <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
           Назва групи
         </label>
         <InputText
+          id="title"
           v-model="form.title"
           type="text"
           placeholder="Наприклад: Juniors, Beginners A1"
@@ -22,14 +20,12 @@
         />
       </div>
 
-      <!-- Учні -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          Учні
-          {{ form.students ? `(${form.students.length} вибрано)` : "" }}
+          Учні ({{ form.students.length }} вибрано)
         </label>
 
-        <div class="card flex justify-center">
+        <div class="flex justify-center">
           <MultiSelect
             v-model="form.students"
             :options="allStudents"
@@ -41,51 +37,25 @@
           />
         </div>
       </div>
-      <div v-if="isEditMode" class="space-y-1 mb-4">
-        <label class="block text-sm font-medium text-gray-700"> Розклад </label>
-        <div class="space-y-1 border border-gray-300 rounded-lg p-3">
-          <div v-if="form.schedules.length > 0" class="space-y-2 mb-1">
-            <div
-              v-for="schedule in form.schedules"
-              :key="schedule.id"
-              class="flex items-center justify-between rounded-lg bg-gray-200 border border-gray-300"
-            >
-              <span class="pl-2">
-                {{
-                  format(new Date(schedule.start_date), "EEEE - HH:mm", {
-                    locale: uk,
-                  })
-                }}
-              </span>
-              <Button
-                @click="deleteSchedule(schedule.id)"
-                icon="pi pi-delete-left"
-                class="text-red-600 ml-2 w-10"
-                severity="danger"
-                raised
-              ></Button>
-            </div>
-          </div>
-          <div v-else class="text-center py-1">
-            <p class="text-gray-500">Список пустий.</p>
-          </div>
-          <Button
-            label="Створити"
-            severity="info"
-            variant="text"
-            :loading="savingLoading"
-            class="w-full"
-            @click="openDialog()"
-          />
-        </div>
-      </div>
+
+      <ScheduleList
+        v-if="isEditMode"
+        title="Розклад"
+        :items="scheduleItems"
+        date-format="EEEE - HH:mm"
+        add-label="Створити"
+        :loading="loading"
+        @add="openDialog"
+        @remove="removeSchedule"
+      />
+
       <Button
         label="Зберегти"
         severity="info"
         raised
-        :loading="savingLoading"
+        :loading="loading"
         class="w-full"
-        @click="saveGroup()"
+        @click="saveGroup"
       />
       <Button
         :label="isEditMode ? 'Видалити групу' : 'Скасувати'"
@@ -93,11 +63,12 @@
         variant="text"
         size="small"
         class="w-full"
-        :loading="savingLoading"
-        @click="deleteGroup()"
+        :loading="loading"
+        @click="isEditMode ? deleteGroup() : goBack()"
       />
     </div>
   </div>
+
   <Dialog
     v-model:visible="showDialog"
     modal
@@ -108,7 +79,7 @@
       <div class="flex items-center gap-2">
         <Select
           v-model="selectedDay"
-          :options="weekDays"
+          :options="WEEK_DAYS"
           optionLabel="label"
           optionValue="value"
           placeholder="День тижня"
@@ -123,11 +94,7 @@
         />
       </div>
       <label class="text-xs text-gray-500">Назва</label>
-      <InputText
-        v-model="dialogTitle"
-        placeholder="лінк.юа/..."
-        class="w-full"
-      />
+      <InputText v-model="dialogTitle" class="w-full" />
       <label class="text-xs text-gray-500">Посилання (опціонально)</label>
       <InputText
         v-model="dialogLink"
@@ -139,8 +106,9 @@
       icon="pi pi-plus"
       severity="info"
       label="Створити"
-      @click="confirmDialog"
+      :disabled="!canCreate"
       class="w-full mt-3"
+      @click="addSchedule"
     />
   </Dialog>
 </template>
@@ -148,63 +116,61 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { createSupabaseDbClient } from "../lib/supabaseClient.js";
-import type { TeacherStudentsGet } from "../models/teacherStudentsGet.js";
-import type { GroupMember } from "../models/getGroupsModel.js";
-import type { ShortScheduleModel } from "../models/getShortSchedule.js";
-import { useToast } from "primevue/usetoast";
-import { format } from "date-fns";
-import { uk } from "date-fns/locale";
 import { useBackButton } from "vue-tg";
-import { session } from "../lib/session.js";
+import { createSupabaseDbClient } from "../lib/supabaseClient";
+import { getCurrentUserId } from "../lib/session";
+import { useNotify } from "../composables/useNotify";
+import { fetchTeacherStudents } from "../services/students";
+import { createSchedule, deleteSchedule } from "../services/schedule";
+import { WEEK_DAYS, getCurrentHour, getNextOccurrence } from "../utils/date";
+import ScheduleList from "../components/ScheduleList.vue";
+import type { User } from "../models/user";
+import type { GroupMember } from "../models/getGroupsModel";
+import type { ShortScheduleModel } from "../models/getShortSchedule";
 
 interface GroupForm {
   title: string;
-  students: TeacherStudentsGet[];
+  students: User[];
   schedules: ShortScheduleModel[];
 }
 
 const supabase = createSupabaseDbClient();
-const now = new Date();
-now.setMinutes(0);
-
-const showDialog = ref(false);
-const dialogTitle = ref<string | undefined>(undefined);
-const dialogLink = ref<string | null>(null);
-const selectedDay = ref<number | null>(null);
-const selectedTime = ref<Date | null>(now);
-const weekDays = [
-  { label: "Понеділок", value: 1 },
-  { label: "Вівторок", value: 2 },
-  { label: "Середа", value: 3 },
-  { label: "Четвер", value: 4 },
-  { label: "П'ятниця", value: 5 },
-  { label: "Субота", value: 6 },
-  { label: "Неділя", value: 0 },
-];
-
-const toast = useToast();
 const route = useRoute();
 const router = useRouter();
+const notify = useNotify();
+
 const backButton = useBackButton();
 backButton?.show?.();
+backButton?.onClick?.(goBack);
 
-backButton?.onClick?.(() => {
-  handleBack();
-});
+const groupId = computed(() => route.params.id as string | undefined);
+const isEditMode = computed(() => !!groupId.value);
 
-const isEditMode = computed(() => !!route.params.id);
-const groupId = computed(() => route.params.id as string);
-
-const allStudents = ref<TeacherStudentsGet[]>([]);
-
+const allStudents = ref<User[]>([]);
 const form = ref<GroupForm>({
   title: "",
   students: [],
   schedules: [],
 });
+const loading = ref(false);
 
-const savingLoading = ref(false);
+const scheduleItems = computed(() =>
+  form.value.schedules.map((s) => ({ id: s.id, date: s.start_date })),
+);
+
+// Діалог створення регулярного заняття
+const showDialog = ref(false);
+const selectedDay = ref<number | null>(null);
+const selectedTime = ref<Date | null>(getCurrentHour());
+const dialogTitle = ref("");
+const dialogLink = ref<string | null>(null);
+
+const canCreate = computed(
+  () =>
+    selectedDay.value !== null &&
+    selectedTime.value !== null &&
+    !!dialogTitle.value.trim(),
+);
 
 onMounted(async () => {
   await loadStudents();
@@ -213,310 +179,178 @@ onMounted(async () => {
   }
 });
 
-const openDialog = async () => {
-  showDialog.value = true;
-  dialogTitle.value = form.value.title;
-};
-
-const confirmDialog = async () => {
-  addSchedule();
-
-  showDialog.value = false;
-  selectedDay.value = null;
-  selectedTime.value = null;
-  savingLoading.value = false;
-};
+function goBack() {
+  router.push({ name: "Students", query: { tab: "groups" } });
+}
 
 const loadStudents = async () => {
   try {
-    savingLoading.value = true;
-    const user = session.value?.user;
-
-    const { data: relations, error: relError } = await supabase
-      .from("teachers_students")
-      .select("id, student_id")
-      .eq("teacher_id", user!.id);
-
-    if (relError) {
-      throw relError;
-    }
-
-    if (!relations || relations.length === 0) {
-      allStudents.value = [];
-      return;
-    }
-
-    const studentIds = relations.map((r) => r.student_id);
-
-    const { data: studentsData, error: studError } = await supabase
-      .from("users")
-      .select("*")
-      .in("user_id", studentIds);
-
-    if (studError) {
-      throw studError;
-    }
-
-    if (studentsData) {
-      allStudents.value = studentsData;
-    }
+    loading.value = true;
+    allStudents.value = await fetchTeacherStudents(getCurrentUserId());
   } catch (error) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка завантаження",
-      life: 3000,
-    });
+    notify.error("Помилка завантаження", error);
   } finally {
-    savingLoading.value = false;
+    loading.value = false;
   }
 };
 
-const deleteGroup = async () => {
+const loadGroup = async () => {
   try {
-    savingLoading.value = true;
-
-    if (!isEditMode.value) {
-      handleBack();
-      return;
-    }
-
-    if (
-      !confirm(
-        "Ви впевнені, що хочете видалити цю групу? Цю дію не можна скасувати.",
-      )
-    ) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("groups")
-      .delete()
-      .eq("id", groupId.value);
-
-    if (error) {
-      throw error;
-    }
-
-    handleBack();
-  } catch (error) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка завантаження",
-      life: 3000,
-    });
-  } finally {
-    savingLoading.value = false;
-  }
-};
-
-const deleteSchedule = async (scheduleId: string) => {
-  try {
-    savingLoading.value = true;
-
-    const { error: attendanceError } = await supabase
-      .from("attendances")
-      .delete()
-      .eq("schedule_id", scheduleId)
-      .eq("status", "scheduled");
-
-    if (attendanceError) {
-      throw attendanceError;
-    }
-
-    const { error } = await supabase
-      .from("schedule")
-      .delete()
-      .eq("id", scheduleId);
-
-    if (error) {
-      throw error;
-    }
-  } catch (error) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка видалення",
-      life: 3000,
-    });
-  } finally {
-    savingLoading.value = false;
-    await loadGroup();
-  }
-};
-
-const addSchedule = async () => {
-  if (selectedDay.value === null || !selectedTime.value) {
-    alert("Оберіть день та час");
-    return;
-  }
-
-  try {
-    savingLoading.value = true;
-
-    const nextDate = getNextOccurrence(
-      selectedDay.value as number,
-      selectedTime.value as Date,
-    );
-
-    const { error: updateScheduleError } = await supabase.functions.invoke(
-      "create_schedule",
-      {
-        body: JSON.stringify({
-          title: dialogTitle.value,
-          isGroup: true,
-          date: nextDate,
-          link: dialogLink.value,
-          id: groupId.value,
-        }),
-      },
-    );
-
-    if (updateScheduleError) {
-      throw updateScheduleError;
-    }
-  } catch (error) {
-    console.error(error);
-    toast.add({
-      severity: "error",
-      summary: "Помилка додавання розкладу",
-      life: 3000,
-    });
-  } finally {
-    savingLoading.value = false;
-    await loadGroup();
-  }
-};
-
-function getNextOccurrence(dayOfWeek: number, time: Date): Date {
-  const now = new Date();
-  const result = new Date(now);
-
-  result.setHours(time.getHours(), time.getMinutes(), 0, 0);
-
-  const currentDay = now.getDay();
-  const daysUntil = (dayOfWeek - currentDay + 7) % 7 || 7;
-  result.setDate(now.getDate() + daysUntil);
-
-  return result;
-}
-
-const saveGroup = async () => {
-  try {
-    savingLoading.value = true;
-
-    var groupIdValue = groupId.value ? groupId.value : null;
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (isEditMode.value) {
-      const { error: updateGroupError } = await supabase
-        .from("groups")
-        .update({ title: form.value.title })
-        .eq("id", groupIdValue);
-
-      if (updateGroupError) throw updateGroupError;
-    } else {
-      const { data: newGroup, error: insertGroupError } = await supabase
-        .from("groups")
-        .insert({ title: form.value.title, teacher_id: user!.id })
-        .select()
-        .single();
-
-      if (insertGroupError) {
-        throw insertGroupError;
-      }
-
-      groupIdValue = newGroup.id;
-    }
-
-    //Group members
-    if (isEditMode.value) {
-      const { error: deleteMembersError } = await supabase
-        .from("group_members")
-        .delete()
-        .eq("group_id", groupIdValue);
-
-      if (deleteMembersError) throw deleteMembersError;
-    }
-
-    const { error: insertMembersError } = await supabase
-      .from("group_members")
-      .insert(
-        form.value.students.map((student) => ({
-          group_id: groupIdValue,
-          student_id: student.user_id,
-        })),
-      );
-
-    if (insertMembersError) {
-      throw insertMembersError;
-    }
-
-    if (isEditMode) {
-      await loadGroup();
-    } else {
-      toast.add({ severity: "success", summary: "Групу створено", life: 2000 });
-      handleBack();
-    }
-  } catch (error) {
-    console.error(error);
-    toast.add({
-      severity: "error",
-      summary: "Помилка збереження",
-      life: 3000,
-    });
-  } finally {
-    savingLoading.value = false;
-  }
-};
-
-async function loadGroup() {
-  try {
-    savingLoading.value = true;
+    loading.value = true;
 
     const { data, error } = await supabase
       .from("groups")
-      .select(
-        `
-    *,
-    group_members(*),
-    schedule!group_id(id, start_date)
-  `,
-      )
+      .select("*, group_members(*), schedule!group_id(id, start_date)")
       .eq("id", groupId.value)
       .single();
 
     if (error) throw error;
 
+    const memberIds = new Set(
+      data.group_members.map((gm: GroupMember) => gm.student_id),
+    );
+
     form.value.title = data.title;
-    form.value.schedules = data.schedule.map((item: any) => ({
-      ...item,
-      start_date: new Date(item.start_date),
-    }));
-    form.value.students = allStudents.value.filter((student) =>
-      data.group_members.some(
-        (gm: GroupMember) => gm.student_id === student.user_id,
-      ),
+    form.value.schedules = data.schedule;
+    form.value.students = allStudents.value.filter((s) =>
+      memberIds.has(s.user_id),
     );
   } catch (error) {
-    console.error(error);
-    toast.add({
-      severity: "error",
-      summary: "Помилка завантаження",
-      life: 3000,
-    });
+    notify.error("Помилка завантаження", error);
   } finally {
-    savingLoading.value = false;
+    loading.value = false;
   }
-}
+};
 
-function handleBack() {
-  router.push({
-    name: "Students",
-    params: { activeTab: "groups" },
-  });
-}
+const saveGroup = async () => {
+  const title = form.value.title.trim();
+  if (!title) {
+    notify.warn("Введіть назву групи");
+    return;
+  }
+
+  try {
+    loading.value = true;
+    let id = groupId.value;
+
+    if (id) {
+      const { error } = await supabase
+        .from("groups")
+        .update({ title })
+        .eq("id", id);
+      if (error) throw error;
+
+      // Простіше перезаписати список учасників, ніж шукати різницю
+      const { error: deleteError } = await supabase
+        .from("group_members")
+        .delete()
+        .eq("group_id", id);
+      if (deleteError) throw deleteError;
+    } else {
+      const { data, error } = await supabase
+        .from("groups")
+        .insert({ title, teacher_id: getCurrentUserId() })
+        .select()
+        .single();
+      if (error) throw error;
+
+      id = data.id as string;
+    }
+
+    if (form.value.students.length) {
+      const { error } = await supabase.from("group_members").insert(
+        form.value.students.map((student) => ({
+          group_id: id,
+          student_id: student.user_id,
+        })),
+      );
+      if (error) throw error;
+    }
+
+    if (isEditMode.value) {
+      notify.success("Збережено");
+      await loadGroup();
+    } else {
+      notify.success("Групу створено");
+      goBack();
+    }
+  } catch (error) {
+    notify.error("Помилка збереження", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const deleteGroup = async () => {
+  if (
+    !confirm(
+      "Ви впевнені, що хочете видалити цю групу? Цю дію не можна скасувати.",
+    )
+  ) {
+    return;
+  }
+
+  try {
+    loading.value = true;
+    const { error } = await supabase
+      .from("groups")
+      .delete()
+      .eq("id", groupId.value);
+
+    if (error) throw error;
+
+    goBack();
+  } catch (error) {
+    notify.error("Помилка видалення", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const openDialog = () => {
+  dialogTitle.value = form.value.title;
+  showDialog.value = true;
+};
+
+const addSchedule = async () => {
+  if (selectedDay.value === null || !selectedTime.value || !groupId.value) {
+    notify.warn("Оберіть день та час");
+    return;
+  }
+
+  const payload = {
+    title: dialogTitle.value,
+    isGroup: true,
+    date: getNextOccurrence(selectedDay.value, selectedTime.value),
+    link: dialogLink.value,
+    id: groupId.value,
+  };
+
+  showDialog.value = false;
+  selectedDay.value = null;
+  selectedTime.value = getCurrentHour();
+  dialogLink.value = null;
+
+  try {
+    loading.value = true;
+    await createSchedule(payload);
+  } catch (error) {
+    notify.error("Помилка додавання розкладу", error);
+  } finally {
+    await loadGroup();
+  }
+};
+
+const removeSchedule = async (scheduleId: string) => {
+  try {
+    loading.value = true;
+    await deleteSchedule(scheduleId);
+  } catch (error) {
+    notify.error("Помилка видалення", error);
+  } finally {
+    await loadGroup();
+  }
+};
 </script>
 
 <style scoped>

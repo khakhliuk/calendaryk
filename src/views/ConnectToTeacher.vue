@@ -114,22 +114,30 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
-import { supabase } from "../lib/supabaseClient.js";
-import router from "../router/index.js";
-
-import { useRoute } from "vue-router";
-const route = useRoute();
+import { useRoute, useRouter } from "vue-router";
 import { useMiniApp } from "vue-tg";
+import { supabase } from "../lib/supabaseClient";
+import { useNotify } from "../composables/useNotify";
+import {
+  registerUser,
+  signInWithTelegram,
+  telegramLogin,
+  type TelegramUserInfo,
+} from "../services/auth";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const route = useRoute();
+const router = useRouter();
 const miniApp = useMiniApp();
-import { useToast } from "primevue/usetoast";
-const toast = useToast();
+const notify = useNotify();
 
 const loading = ref(false);
-const telegramId = ref("");
+const telegramUser = ref<TelegramUserInfo | null>(null);
 const isUserRegistered = ref(false);
 
-const connectTeacherId = computed(() =>
-  route.query.id ? (route.query.id as string) : null,
+const teacherId = computed(() =>
+  typeof route.query.id === "string" ? route.query.id : null,
 );
 
 const form = ref({
@@ -139,212 +147,117 @@ const form = ref({
   birthDate: null as Date | null,
 });
 
+const isFormValid = () => {
+  const { fullName, email, birthDate } = form.value;
+  return !!fullName.trim() && EMAIL_REGEX.test(email) && !!birthDate;
+};
+
 const handleConnect = async () => {
+  if (!telegramUser.value) return;
+
+  if (!isUserRegistered.value && !isFormValid()) {
+    notify.warn("Будь ласка, заповніть всі поля коректно.");
+    return;
+  }
+
   loading.value = true;
   try {
-    if (!validateForm()) {
-      toast.add({
-        severity: "warning",
-        summary: "Будь ласка, заповніть всі поля коректно.",
-        life: 4000,
+    if (!isUserRegistered.value) {
+      await registerUser({
+        telegramId: String(telegramUser.value.id),
+        fullName: form.value.fullName.trim(),
+        email: form.value.email,
+        birthDate: form.value.birthDate,
+        is_teacher: false,
+        telegram_username: telegramUser.value.username,
       });
+    }
+
+    await signInAndConnect(telegramUser.value.id);
+    router.push("/dashboard");
+  } catch (error) {
+    notify.error("Не вдалося під'єднатись", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const signInAndConnect = async (telegramId: string | number) => {
+  await signInWithTelegram(telegramId);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Користувача не знайдено");
+
+  const { error } = await supabase.from("teachers_students").insert({
+    teacher_id: teacherId.value,
+    student_id: user.id,
+  });
+
+  if (error) throw error;
+};
+
+const isAlreadyConnected = async (telegramId: string | number) => {
+  const { data: student, error } = await supabase
+    .from("users")
+    .select("user_id")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!student) return false;
+
+  const { data: relations, error: relationError } = await supabase
+    .from("teachers_students")
+    .select("id")
+    .eq("teacher_id", teacherId.value)
+    .eq("student_id", student.user_id);
+
+  if (relationError) throw relationError;
+
+  return !!relations?.length;
+};
+
+const loadData = async () => {
+  try {
+    loading.value = true;
+
+    const { data: teacher, error } = await supabase
+      .from("users")
+      .select("name")
+      .eq("user_id", teacherId.value)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!teacher) {
+      router.push({ name: "NotFound" });
       return;
     }
 
-    await register();
-  } catch (e) {
-    console.error(e);
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + e,
-      life: 3000,
-    });
-  } finally {
-    loading.value = false;
-  }
-};
+    form.value.teacherName = teacher.name;
 
-const register = async () => {
-  try {
-    const { data: loginData, error: userError } =
-      await supabase.functions.invoke(
-        import.meta.env.DEV ? "telegram-login-test" : "telegram-login",
-        {
-          body: {
-            initData: miniApp.initData,
-          },
-        },
-      );
+    const { exists, userInfo } = await telegramLogin(miniApp.initData);
+    telegramUser.value = userInfo;
+    isUserRegistered.value = exists;
 
-    if (userError) {
-      throw userError;
-    }
-
-    const parsed = JSON.parse(loginData);
-    const user = parsed.userInfo;
-    telegramId.value = user.id;
-
-    const { error } = await supabase.functions.invoke("register", {
-      body: JSON.stringify({
-        userData: {
-          telegramId: String(user.id),
-          fullName: form.value.fullName,
-          email: form.value.email,
-          birthDate: form.value.birthDate,
-          is_teacher: false,
-          telegram_username: user.username,
-        },
-      }),
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    await signInAndConnect();
-  } catch (er) {
-    console.error(er);
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + er,
-      life: 3000,
-    });
-  }
-};
-
-const signInAndConnect = async (shouldConnect: boolean = true) => {
-  try {
-    loading.value = true;
-    const email = `tg_${telegramId.value}@example.com`;
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: String(telegramId.value),
-    });
-
-    if (shouldConnect) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      await supabase.from("teachers_students").insert({
-        teacher_id: connectTeacherId.value,
-        student_id: user!.id,
-      });
-
-      if (error) {
-        throw error;
-      }
-    }
-
-    router.push("/dashboard");
-  } catch (error) {
-    console.error(error);
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + error,
-      life: 3000,
-    });
-  } finally {
-    loading.value = false;
-  }
-};
-
-const validateForm = () => {
-  if (!form.value.fullName || !form.value.email || !form.value.birthDate) {
-    return false;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(form.value.email)) {
-    return false;
-  }
-  return true;
-};
-
-const prepareData = async () => {
-  try {
-    loading.value = true;
-
-    const { data: teacherData, error: teacherError } = await supabase
-      .from("users")
-      .select()
-      .eq("user_id", connectTeacherId.value)
-      .maybeSingle();
-
-    if (teacherError) {
-      throw teacherError;
-    }
-
-    form.value.teacherName = teacherData.name;
-
-    const { data: loginData, error: userError } =
-      await supabase.functions.invoke(
-        import.meta.env.DEV ? "telegram-login-test" : "telegram-login",
-        {
-          body: {
-            initData: miniApp.initData,
-          },
-        },
-      );
-
-    if (userError) {
-      const errorBody = await userError.context?.json();
-      throw JSON.stringify(errorBody);
-    }
-
-    const parsed = JSON.parse(loginData);
-    if (parsed.exists) {
-      isUserRegistered.value = true;
-
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select()
-        .eq("telegram_id", parsed.userInfo.id)
-        .maybeSingle();
-
-      if (userError) {
-        throw userError;
-      }
-
-      const { data: connectData, error: connectError } = await supabase
-        .from("teachers_students")
-        .select()
-        .eq("teacher_id", connectTeacherId.value)
-        .eq("student_id", userData.user_id);
-
-      if (connectError) {
-        throw connectError;
-      }
-
-      if (connectData) {
-        toast.add({
-          severity: "warn",
-          summary: "Ви вже приєднані до цього керівника!",
-          life: 3000,
-        });
-
-        router.push("/");
-      }
+    if (exists && (await isAlreadyConnected(userInfo.id))) {
+      notify.warn("Ви вже приєднані до цього керівника!");
+      router.push("/");
     }
   } catch (error) {
-    console.error(error);
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + error,
-      life: 3000,
-    });
+    notify.error("Помилка завантаження", error);
   } finally {
     loading.value = false;
   }
 };
 
 onMounted(async () => {
-  if (!connectTeacherId.value) {
-    router.push("/404");
+  if (!teacherId.value) {
+    router.push({ name: "NotFound" });
     return;
   }
 
-  await prepareData();
+  await loadData();
 });
 </script>

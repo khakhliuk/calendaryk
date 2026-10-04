@@ -1,18 +1,13 @@
 {
-  "name": "tailwind_teach",
+  "name": "calendaryk",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Стартовый шаблон для разработки современных веб-приложений с использованием Vue 3, Vite, TypeScript, Vue Router и Tailwind CSS.",
-  "author": "Яковенко Алексей <mr.mnogo@gmail.com> (https://t.me/yakvenalexx)",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Yakvenalex/vue-typescript-tailwind-starter.git"
-  },
-  "license": "MIT",
+  "description": "Telegram Mini App для ведення розкладу занять вчителя та учнів",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b",
     "preview": "vite preview"
   },
   "dependencies": {

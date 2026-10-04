@@ -17,12 +17,7 @@
             v-model="form.name"
             placeholder="Введіть ваше ім'я"
             class="w-full"
-            :pt="{
-              root: {
-                class:
-                  'border-0 border-b border-gray-200 rounded-none px-0 text-gray-900 text-sm focus:ring-0 focus:border-blue-400 bg-transparent w-full pb-1 caret-gray-500',
-              },
-            }"
+            :pt="underlineInputPt"
           />
         </div>
         <div class="px-4 py-3 flex flex-col gap-1">
@@ -31,12 +26,7 @@
             v-model="form.email"
             placeholder="Введіть Email"
             class="w-full"
-            :pt="{
-              root: {
-                class:
-                  'border-0 border-b border-gray-200 rounded-none px-0 text-gray-900 text-sm focus:ring-0 focus:border-blue-400 bg-transparent w-full pb-1 caret-gray-500',
-              },
-            }"
+            :pt="underlineInputPt"
           />
         </div>
       </div>
@@ -94,7 +84,7 @@
         severity="info"
         raised
         :loading="saving"
-        :disabled="!changes"
+        :disabled="!hasChanges"
         class="w-full"
         @click="save"
       />
@@ -103,100 +93,96 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
-import { createSupabaseDbClient } from "../lib/supabaseClient.js";
-import { useToast } from "primevue/usetoast";
-import { useBackButton } from "vue-tg";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { session } from "../lib/session.js";
+import { useBackButton } from "vue-tg";
+import { createSupabaseDbClient } from "../lib/supabaseClient";
+import { getCurrentUserId } from "../lib/session";
+import { useNotify } from "../composables/useNotify";
+import type { UserSettings } from "../models/userSettings";
+
+interface SettingsForm {
+  name: string;
+  email: string;
+  notificationsEnabled: boolean;
+  notifyMinutesBefore: number;
+}
+
+const DEFAULT_NOTIFY_MINUTES = 15;
+const minuteOptions = [5, 15, 30, 60];
+
+const underlineInputPt = {
+  root: {
+    class:
+      "border-0 border-b border-gray-200 rounded-none px-0 text-gray-900 text-sm focus:ring-0 focus:border-blue-400 bg-transparent w-full pb-1 caret-gray-500",
+  },
+};
 
 const supabase = createSupabaseDbClient();
 const router = useRouter();
-const backButton = useBackButton();
-const toast = useToast();
-backButton?.show?.();
+const notify = useNotify();
 
-backButton?.onClick?.(() => {
-  router.back();
-});
+const backButton = useBackButton();
+backButton?.show?.();
+backButton?.onClick?.(() => router.back());
 
 const saving = ref(false);
-const changes = ref(false);
-const minuteOptions = [5, 15, 30, 60];
-
-const form = ref({
+const form = ref<SettingsForm>({
   name: "",
   email: "",
   notificationsEnabled: false,
-  notifyMinutesBefore: 15,
+  notifyMinutesBefore: DEFAULT_NOTIFY_MINUTES,
 });
+// Останній збережений стан - з ним порівнюємо форму
+const savedForm = ref<SettingsForm>({ ...form.value });
+
+const hasChanges = computed(
+  () => JSON.stringify(form.value) !== JSON.stringify(savedForm.value),
+);
 
 onMounted(async () => {
   saving.value = true;
   try {
-    const user = session.value?.user;
-    if (!user) throw "Користувача не знайдено";
+    const userId = getCurrentUserId();
 
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("name, email")
-      .eq("user_id", user!.id)
-      .single();
+    const [userRes, settingsRes] = await Promise.all([
+      supabase.from("users").select("name, email").eq("user_id", userId).single(),
+      supabase
+        .from("user_settings")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle<UserSettings>(),
+    ]);
 
-    if (userError) {
-      throw userError.message;
-    }
+    if (userRes.error) throw userRes.error;
+    if (settingsRes.error) throw settingsRes.error;
 
-    const { data: srttingsData, error: srttingsError } = await supabase
-      .from("user_settings")
-      .select("*")
-      .eq("user_id", user!.id)
-      .maybeSingle();
-
-    if (srttingsError) {
-      throw srttingsError.message;
-    }
-
-    form.value.name = userData.name ?? "";
-    form.value.email = userData.email ?? "";
-    form.value.notificationsEnabled = srttingsData.enable_notification ?? false;
-    form.value.notifyMinutesBefore = srttingsData.notification_timing ?? 15;
-  } catch (e) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка отримання даних\n" + e,
-      life: 3000,
-    });
+    form.value = {
+      name: userRes.data.name ?? "",
+      email: userRes.data.email ?? "",
+      notificationsEnabled: settingsRes.data?.enable_notification ?? false,
+      notifyMinutesBefore:
+        settingsRes.data?.notification_timing ?? DEFAULT_NOTIFY_MINUTES,
+    };
+    savedForm.value = { ...form.value };
+  } catch (error) {
+    notify.error("Помилка отримання даних", error);
   } finally {
     saving.value = false;
-
-    watch(
-      form,
-      () => {
-        changes.value = true;
-      },
-      { deep: true },
-    );
   }
 });
 
 const save = async () => {
   saving.value = true;
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = getCurrentUserId();
 
-    const { error: nameError } = await supabase
+    const { error: userError } = await supabase
       .from("users")
-      .update({
-        name: form.value.name,
-        email: form.value.email,
-      })
-      .eq("user_id", user.id);
+      .update({ name: form.value.name, email: form.value.email })
+      .eq("user_id", userId);
 
-    if (nameError) throw nameError;
+    if (userError) throw userError;
 
     const { error: settingsError } = await supabase
       .from("user_settings")
@@ -204,28 +190,24 @@ const save = async () => {
         enable_notification: form.value.notificationsEnabled,
         notification_timing: form.value.notifyMinutesBefore,
       })
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (settingsError) throw settingsError;
 
-    toast.add({ severity: "success", summary: "Збережено", life: 2000 });
-    changes.value = false;
-  } catch (e) {
-    toast.add({
-      severity: "error",
-      summary: "Помилка збереження \n" + e,
-      life: 3000,
-    });
+    savedForm.value = { ...form.value };
+    notify.success("Збережено");
+  } catch (error) {
+    notify.error("Помилка збереження", error);
   } finally {
     saving.value = false;
   }
 };
 
+// Ховаємо клавіатуру в Telegram при тапі повз поле вводу
 const closeKeyboard = (e: Event) => {
   const target = e.target as HTMLElement;
   if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
-    const activeElement = document.activeElement as HTMLElement;
-    activeElement?.blur();
+    (document.activeElement as HTMLElement | null)?.blur();
   }
 };
 </script>

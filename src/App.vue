@@ -1,10 +1,7 @@
 <template>
   <ExpandedViewport />
   <div id="app" class="h-dvh overflow-hidden flex flex-col">
-    <main
-      class="flex-1 bg-gray-50 overflow-y-auto"
-      style="padding-bottom: 65px"
-    >
+    <main class="flex-1 bg-gray-50 overflow-y-auto pb-[65px]">
       <router-view />
     </main>
     <BottomNav
@@ -19,51 +16,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useMiniApp, useSettingsButton, ExpandedViewport } from "vue-tg";
 import { supabase } from "./lib/supabaseClient";
-import { useRoute } from "vue-router";
 import { session } from "./lib/session";
-import { useSettingsButton } from "vue-tg";
-import { useMiniApp, ExpandedViewport } from "vue-tg";
-
 import BottomNav from "./components/BottomNav.vue";
-import { useRouter } from "vue-router";
+
+const ROUTES_WITHOUT_NAV = ["Login", "ConnectToTeacher", "NotFound"];
 
 const miniApp = useMiniApp();
 const router = useRouter();
 const route = useRoute();
+
 const settingsButton = useSettingsButton();
 settingsButton?.show?.();
-settingsButton?.onClick?.(() => {
-  router.push("/settings");
-});
+settingsButton?.onClick?.(() => router.push({ name: "Settings" }));
 
-const hiddenBottomRoutes = ["/", "/connect", "/404", "/student-dashboard"];
-const showBottomNav = computed(() => {
-  return session.value && !hiddenBottomRoutes.includes(route.path);
-});
+const showBottomNav = computed(
+  () => !!session.value && !ROUTES_WITHOUT_NAV.includes(String(route.name)),
+);
 
-const refreshAppState = async () => {
+// Коли міні-апп повертається з фону, сесія могла оновитись
+const refreshSession = async () => {
   const { data } = await supabase.auth.getSession();
   session.value = data.session;
 };
 
-const onResume = () => {
-  if (!document.hidden) {
-    refreshAppState();
-  }
-};
-
 onMounted(() => {
-  miniApp.onActive?.(() => {
-    refreshAppState();
-  });
-});
-
-onUnmounted(() => {
-  document.removeEventListener("visibilitychange", onResume);
-  window.removeEventListener("focus", onResume);
+  miniApp.onActive?.(refreshSession);
 });
 </script>
-
-<style scoped></style>

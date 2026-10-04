@@ -8,6 +8,7 @@
     <div class="px-4 mt-2 flex flex-col gap-1">
       <div
         v-for="teacher in teachers"
+        :key="teacher.telegram_id"
         class="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-4"
       >
         <Avatar
@@ -30,7 +31,7 @@
           outlined
           severity="info"
           iconPos="right"
-          @click="openTelegram(teacher.telegram_username)"
+          @click="openTelegramChat(teacher.telegram_username)"
         />
       </div>
       <div v-if="!teachers.length" class="text-center py-12 text-gray-400">
@@ -43,70 +44,56 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { createSupabaseDbClient } from "../lib/supabaseClient.js";
-import { useMiniApp } from "vue-tg";
-import { session } from "../lib/session.js";
-import { useToast } from "primevue/usetoast";
-import { useBackButton } from "vue-tg";
-const backButton = useBackButton();
-backButton?.hide?.();
-const toast = useToast();
+import { useBackButton, useMiniApp } from "vue-tg";
+import { createSupabaseDbClient } from "../lib/supabaseClient";
+import { getCurrentUserId } from "../lib/session";
+import { useNotify } from "../composables/useNotify";
+import { getInitials } from "../utils/strings";
+import type { User } from "../models/user";
+
+type TeacherInfo = Pick<
+  User,
+  "name" | "email" | "telegram_id" | "telegram_username"
+>;
+
 const supabase = createSupabaseDbClient();
 const miniApp = useMiniApp();
+const notify = useNotify();
 
-const teachers = ref<
-  {
-    name: string;
-    email: string;
-    telegram_id: string;
-    telegram_username: string;
-  }[]
->([]);
+const backButton = useBackButton();
+backButton?.hide?.();
 
-const getInitials = (name: string) => {
-  if (!name) return "-";
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
-};
+const teachers = ref<TeacherInfo[]>([]);
 
-onMounted(async () => {
-  await getData();
-});
+onMounted(loadTeachers);
 
-const getData = async () => {
+async function loadTeachers() {
   try {
-    const user = session.value?.user;
-
-    const { data: relations } = await supabase
+    const { data: relations, error: relationsError } = await supabase
       .from("teachers_students")
       .select("teacher_id")
-      .eq("student_id", user!.id);
+      .eq("student_id", getCurrentUserId());
 
+    if (relationsError) throw relationsError;
     if (!relations?.length) return;
 
-    const teacherIds = relations.map((r) => r.teacher_id);
-
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("users")
       .select("name, email, telegram_id, telegram_username")
-      .in("user_id", teacherIds);
+      .in(
+        "user_id",
+        relations.map((r) => r.teacher_id),
+      );
 
-    if (data) teachers.value = data;
-  } catch (er: any) {
-    console.error(er);
-    toast.add({
-      severity: "error",
-      summary: "Помилка: \n" + er.message,
-      life: 3000,
-    });
+    if (error) throw error;
+
+    teachers.value = data ?? [];
+  } catch (error) {
+    notify.error("Не вдалося завантажити керівників", error);
   }
-};
+}
 
-const openTelegram = (username: string) => {
+const openTelegramChat = (username: string) => {
   miniApp.openTelegramLink(`https://t.me/${username}`);
 };
 </script>
